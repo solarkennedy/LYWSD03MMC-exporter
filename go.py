@@ -56,38 +56,37 @@ class MyDelegate(btle.DefaultDelegate):
             pass
 
     def handleNotification(self, cHandle, data):
+        temp = round(
+            (int.from_bytes(data[0:2], byteorder="little", signed=True) / 100) * 1.8
+            + 32,
+            3,
+        )
+        print(f"Temperature: {temp}")
+        # self.temperature.set_to_current_time()
+        self.temperature.labels(sensor_name=self.label).set(temp)
+
+        humidity = int.from_bytes(data[2:3], byteorder="little")
+        print(f"Humidity: {humidity}")
+        self.humidity.labels(sensor_name=self.label).set(humidity)
+
+        voltage = int.from_bytes(data[3:5], byteorder="little") / 1000.0
+        print(f"Battery voltage: {voltage}")
+        self.battery_voltage.labels(sensor_name=self.label).set(voltage)
+
+        batteryLevel = min(
+            int(round((voltage - 2.1), 2) * 100), 100
+        )  # 3.1 or above --> 100% 2.1 --> 0 %
+        print("Battery level:", batteryLevel)
+        self.battery_level.labels(sensor_name=self.label).set(batteryLevel)
+
         try:
-            temp = round(
-                (int.from_bytes(data[0:2], byteorder="little", signed=True) / 100) * 1.8
-                + 32,
-                3,
+            push_to_gateway(
+                PROMETHEUS_URL, job="btle_sensor_poller", registry=registry
             )
-            print(f"Temperature: {temp}")
-            # self.temperature.set_to_current_time()
-            self.temperature.labels(sensor_name=self.label).set(temp)
-
-            humidity = int.from_bytes(data[2:3], byteorder="little")
-            print(f"Humidity: {humidity}")
-            self.humidity.labels(sensor_name=self.label).set(humidity)
-
-            voltage = int.from_bytes(data[3:5], byteorder="little") / 1000.0
-            print(f"Battery voltage: {voltage}")
-            self.battery_voltage.labels(sensor_name=self.label).set(voltage)
-
-            batteryLevel = min(
-                int(round((voltage - 2.1), 2) * 100), 100
-            )  # 3.1 or above --> 100% 2.1 --> 0 %
-            print("Battery level:", batteryLevel)
-            self.battery_level.labels(sensor_name=self.label).set(batteryLevel)
-
-            try:
-                push_to_gateway(
-                    PROMETHEUS_URL, job="btle_sensor_poller", registry=registry
-                )
-            except OSError as e:
-                logging.error(
-                    f"Couldn't connect to {PROMETHEUS_URL}. Skipping this update. ({e}"
-                )
+        except OSError as e:
+            logging.error(
+                f"Couldn't connect to {PROMETHEUS_URL}. Skipping this update. ({e}"
+            )
 
 class Sensor:
     def __init__(self, label, address, interface=0):
